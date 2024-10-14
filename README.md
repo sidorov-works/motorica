@@ -1,8 +1,8 @@
 # Тестовое задание компании "Моторика":<br>распознавание жестов
 
-В [**ноутбуке**](https://nbviewer.org/github/sidorov-works/motorica/blob/main/Motorica.ipynb) представлено решение тестового задания для приема на стажировку в компанию ["Моторика"](https://motorica.org/home).
+В [**ноутбуке**](https://nbviewer.org/github/sidorov-works/motorica/blob/main/Motorica.ipynb?flush_cache=true) представлено решение тестового задания для приема на стажировку в компанию ["Моторика"](https://motorica.org/home).
 
-> Для корректного отображения интерактивных визуализаций *plotly* следует просматривать [**ноутбук в *nbviewer***](https://nbviewer.org/github/sidorov-works/motorica/blob/main/Motorica.ipynb)
+> Для корректного отображения интерактивных визуализаций *plotly* следует просматривать [**ноутбук в *nbviewer***](https://nbviewer.org/github/sidorov-works/motorica/blob/main/Motorica.ipynb?flush_cache=true)
 
 ## Задача
 Построить модель распознавания жестов на основании временных рядов показаний датчиков, закрепленных на руку *пилота* (*пилот*
