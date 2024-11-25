@@ -1,0 +1,8 @@
+/.ipynb_checkpoints
+/data
+.ds_store
+/venv
+**/__pycache__
+/montages
+/marked
+/fig
