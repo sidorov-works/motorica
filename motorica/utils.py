@@ -53,8 +53,11 @@ def mark_montage(
     pron_col: str = 'Pronation',
     window: int = 0,
     scale: bool = True,
-    grad1_spacing: int = 5,
-    grad2_spacing: int = 5
+    spacing: int = 5,
+    gest_min_ticks: int = 15,
+    gest_max_ticks: int = 60,
+    r_overlap: int = 5,
+    ignore_n_left: int = 5
 ) -> np.ndarray[int]:
     '''
     Осуществляет поиск границ фактически выполняемых жестов по локальным максимумам второго градиента измерений *omg*-датчиков.
@@ -70,15 +73,11 @@ def mark_montage(
 
     **sync_col**: *str, default="SYNC"*<br>Название признака, отвечающего за синхронизацию с протоколом
 
-    **sync_shift**: *int, default=0*<br>Общий сдвиг разметки синхронизации
-
     **window**: *int, default=10*<br>ширина окна для предварительного сглаживания показаний датчиков по медиане; `0` - без сглаживания
 
     **scale**: *bool, default=True*<br>выполнять ли предварительное приведение показаний omg-датчиков к единому масштабу
 
-    **grad1_spacing**: *int, default=5*<br>параметр `spacing` для функции `numpy.gradient()` для вычисления **первого** градиента
-
-    **grad2_spacing**: *int, default=5*<br>параметр `spacing` для функции `numpy.gradient()` для вычисления **второго** градиента
+    **spacing**: *int, default=5*<br>параметр `spacing` для функции `numpy.gradient()`
 
     ### Возвращаемый результат
 
@@ -103,12 +102,12 @@ def mark_montage(
 
     # Вычисление градиентов:
     # 1) Первый – сумма абсолютных градиентов по модулю
-    grad1 = np.sum(np.abs(np.gradient(omg, grad1_spacing, axis=0)), axis=1)
+    grad1 = np.sum(np.abs(np.gradient(omg, spacing, axis=0)), axis=1)
     # не забудем заполнить образовавшиеся "дырки" из NaN
     grad1 = np.nan_to_num(grad1) 
 
     # 2) Второй – градиент первого градиента,
-    grad2 = np.gradient(grad1, grad2_spacing)
+    grad2 = np.gradient(grad1, spacing)
     grad2 = np.nan_to_num(grad2)
     # усиленный возведением в квадрат, но с сохранением знака
     grad2 *= np.abs(grad2)
@@ -120,21 +119,35 @@ def mark_montage(
     peaks[~mask] = 0
 
     # Искать локальные максимумы второго градиента будем внутри отрезков, 
-    # определяемых по признаку синхронизации
+    # определяемых по признаку синхронизации, но при этом ...
     sync_mask = data[sync_col] != data[sync_col].shift(-1)
     sync_index = data[sync_mask].index
 
     res = []
+    prev_change = -float('inf') # (смены жеста пока еще не было)
+
     for l, r in zip(sync_index, sync_index[1:]):
+        if l > 3150:
+            pass
         try:
+            # ... а также возможное опоздание пилота выполнить жест 
+            # до получения уже следующей команды
+            r += r_overlap
+            if data.loc[l, label_col] != data.loc[r, label_col] and data.loc[l, label_col] != 0 and prev_change > 0:
+                r = min(r, prev_change + gest_max_ticks)
+            # ... будем учитывать заданную минимально возможную 
+            # продолжительность жеста gest_min_ticks,..
+            l = max(l + ignore_n_left * int(data.loc[r, label_col] != 0), prev_change + gest_min_ticks)
+
             max_i = np.argmax(peaks[l: r])
-        except ValueError:
+        except: #ValueError, KeyError:
             break
         res.append(
-            (l + max_i,                      # индекс начала жеста (начало смены жеста)
-             data.loc[l + max_i, label_col], # метка жеста
-             data.loc[l + max_i, pron_col])  # метка пронации
+            (l + max_i,                  # индекс начала жеста (начало смены жеста)
+             data.loc[l + 1, label_col], # метка жеста
+             data.loc[l + 1, pron_col])  # метка пронации
         )
+        prev_change = l + max_i
 
     # Отдельно сохраним индексы границ жестов (мы их возвращаем в кортеже результата функции)
     bounds = np.array(res)[:, 0]
@@ -153,7 +166,7 @@ def mark_montage(
         data_copy.loc[l[0]: r[0], 'act_pronation'] = l[2] # l[2] - метка пронации
         data_copy.loc[l[0]: r[0], 'sample'] = i + 1       # порядковый номер жеста в монтаже
 
-    return data_copy, bounds, grad2
+    return data_copy, bounds, grad2 * 10
 
 
 #---------------------------------------------------------------------------------------------
