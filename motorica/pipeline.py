@@ -108,3 +108,73 @@ class PronationPredictor(BaseEstimator, TransformerMixin):
 
         return X_copy_full
     
+
+#----------------------------------------------------------------------------------------
+class LagWrapper(BaseEstimator, TransformerMixin):
+
+    def __init__(
+        self, 
+        estimator,         # объект модели (необученный)
+        w: int = 3,        # ширина лага
+        fill_val: Any = 0  # метка класса для первых w - 1 предсказаний
+    ):
+        self.estimator = estimator
+        self.w = w
+        self.fill_val = fill_val
+
+    # Внутренний метод для формирования набора с лаговыми признаками
+    def _make_lag(self, X: pd.DataFrame | np.ndarray):
+        X_copy = np.array(X)
+        w = self.w          # w - ширина лага
+        n, m = X_copy.shape # n - кол-во строк, m - кол-во столбцов
+            
+        return np.vstack(
+            [X_copy[i: i + w, :].reshape(m * w) for i in range(n - w + 1)]
+        )
+    
+    # Внутренний метод для формирования набора с лаговыми признаками
+    def _make_lag_diff(self, X: pd.DataFrame | np.ndarray):
+        X_copy = np.array(X)
+        w = self.w          # w - ширина лага
+        n, m = X_copy.shape # n - кол-во строк, m - кол-во столбцов
+
+        return np.vstack(
+            [X_copy[i: i + w, :].reshape(m * w) for i in range(n - w + 1)]
+        )
+
+    def fit(self, X, y):
+        # Обучаем модель на лаговых признаках. 
+        # При этом первые w - 1 примеров исходных данных пропускаются 
+        # и в обучении не участвуют 
+        self.estimator.fit(self._make_lag(X), np.array(y)[self.w - 1:])
+        # Скопируем атрибут модели .classes_ в соответсвутующий атрибут обёртки
+        self.classes_ = self.estimator.classes_
+        return self
+    
+    def predict(self, X):
+        
+        return np.hstack([
+            # заполняем первые w - 1 "предсказанных" меток значением по умолчанию
+            [self.fill_val] * (self.w - 1),
+            # делаем предсказание на лаговых признаках        
+            self.estimator.predict(self._make_lag(X))
+        ])
+    
+    def predict_proba(self, X):
+        classes = self.estimator.classes_
+        n_classes = classes.shape[0]
+        return np.vstack([
+            # заполняем первые w - 1 "предсказанных" меток равновероятными значениями
+            [[1 / n_classes] * n_classes] * (self.w - 1),
+            # делаем предсказание на лаговых признаках        
+            self.estimator.predict_proba(self._make_lag(X))
+        ])
+    
+    def set_params(self, **params):
+        # Все именованные арументы кроме перечисленных
+        wrapper_params = ['w']
+        for param in wrapper_params:
+            if param in params:
+                self.w = params.pop(param)
+        # предназначены для оборачиваемой модели
+        self.estimator.set_params(**params)
