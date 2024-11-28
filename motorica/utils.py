@@ -19,6 +19,10 @@ cols_omg = list(map(str, range(N_OMG_SENSORS)))
 cols_gyr = [f'GYR{i}' for i in range(N_GYR_SENSORS)]
 cols_acc = [f'ACC{i}' for i in range(N_ACC_SENSORS)]
 
+COLS_OMG = list(map(str, range(N_OMG_SENSORS)))
+COLS_GYR = [f'GYR{i}' for i in range(N_GYR_SENSORS)]
+COLS_ACC = [f'ACC{i}' for i in range(N_ACC_SENSORS)]
+
 pilots = [1, 2, 3, 4]
 
 NOGO = 0
