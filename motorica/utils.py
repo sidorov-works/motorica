@@ -23,6 +23,11 @@ COLS_ACC = [f'ACC{i}' for i in range(N_ACC_SENSORS)]
 pilots = [1, 2, 3, 4]
 
 NOGO = 0
+THUMB = 1
+GRAB = 2
+OPEN = 3
+OK = 4
+PISTOL = 5
 
 
 #---------------------------------------------------------------------------------------------
