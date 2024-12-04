@@ -15,9 +15,6 @@ from typing import List
 N_OMG_SENSORS = 50
 N_GYR_SENSORS = 3
 N_ACC_SENSORS = 3
-cols_omg = list(map(str, range(N_OMG_SENSORS)))
-cols_gyr = [f'GYR{i}' for i in range(N_GYR_SENSORS)]
-cols_acc = [f'ACC{i}' for i in range(N_ACC_SENSORS)]
 
 COLS_OMG = list(map(str, range(N_OMG_SENSORS)))
 COLS_GYR = [f'GYR{i}' for i in range(N_GYR_SENSORS)]

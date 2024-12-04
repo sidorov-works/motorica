@@ -40,7 +40,7 @@ class PronationPredictor(BaseEstimator, TransformerMixin):
 
     ### Параметры объекта класса
     
-    **features**: *List[str], default=cols_acc + cols_gyr*<br>cписок признаков для предсказания пронации
+    **features**: *List[str], default=COLS_ACC + COLS_GYR*<br>cписок признаков для предсказания пронации
     (по умолчанию берутся каналы ACC и GYR)
     
     **pron_col**: *str, default='act_pronation'*<br>название столбца с истиным значением метки пронации
@@ -60,7 +60,7 @@ class PronationPredictor(BaseEstimator, TransformerMixin):
 
     def __init__(
         self,
-        features: List[str] = cols_acc + cols_gyr,
+        features: List[str] = COLS_ACC + COLS_GYR,
         pron_col: str = 'act_pronation',
         predicted_pron_col: str = 'act_pronation_pred',
         model = LogisticRegression(),
