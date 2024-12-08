@@ -178,3 +178,42 @@ class LagWrapper(BaseEstimator, TransformerMixin):
                 self.w = params.pop(param)
         # предназначены для оборачиваемой модели
         self.estimator.set_params(**params)
+
+
+class LagFeatures(BaseEstimator, TransformerMixin):
+
+    def __init__(
+        self,
+        n_lags: int = 3
+    ):
+        self.n_lags = n_lags
+        self.X_flt = np.empty((0,))
+
+    def fit(self, X, y=None):
+        return self
+
+    def transform(self, X: np.ndarray | pd.DataFrame, y=None):
+         
+        X = np.array(X)
+
+        if self.n_lags < 2:
+            return X
+
+        m = X.shape[1] if X.ndim == 2 else X.shape[0] # кол-во исходных признаков
+        w = m * self.n_lags                           # кол-во лаговых признаков
+        
+        # Если наш объект получает данные впервые,
+        if self.X_flt.shape[0] == 0:
+            # накопируем первый пример 
+            self.X_flt = np.tile(X[0], self.n_lags - 1)
+
+        self.X_flt = np.hstack((self.X_flt, X.flatten()))
+
+        X_lag = np.vstack(
+            [self.X_flt[i: i + w] for i in range(0, self.X_flt.shape[0] - w + 1, m)]
+        )
+
+        # Запомним в нашем объекте лаги только для будущего нового примера
+        self.X_flt = self.X_flt[- (self.n_lags - 1) * m: ]
+
+        return X_lag
