@@ -217,3 +217,59 @@ class LagFeatures(BaseEstimator, TransformerMixin):
         self.X_flt = self.X_flt[- (self.n_lags - 1) * m: ]
 
         return X_lag
+
+
+class TLPEMarker(BasePeakMarker):
+    '''
+    TLPE -- two largest peaks in epoch
+    '''
+    # Функция для непосредственной разметки  
+    def _mark(
+        self,
+        X: pd.DataFrame
+    ) -> np.ndarray[int]:
+        
+        # Сглаживание
+        X_omg = pd.DataFrame(X[self.mark_sensors]).rolling(self.window, center=True).median()
+        # Приведение к единому масштабу
+        X_omg = MinMaxScaler((1, 1000)).fit_transform(X_omg)
+
+        peaks_std1, peaks_grad2 = self._find_peaks(
+            X_omg,
+            window=self.window,
+            spacing=self.spacing
+        )
+
+        peaks = peaks_grad2 if self.use_grad2 else peaks_std1
+
+        sync = X[self.sync_col].copy()
+        # Сдвигаем синхронизацию
+        if self.sync_shift > 0:
+            sync.iloc[self.sync_shift: ] = sync.iloc[: -self.sync_shift]
+            sync.iloc[: self.sync_shift] = 0
+        
+
+        # Искать максимальные пики будем внутри отрезков, 
+        # определяемых по признаку синхронизации
+        sync_mask = sync != sync.shift(-1)
+        sync_index = X[sync_mask].index
+
+        labels = [int(X.loc[idx + 1, self.label_col]) for idx in sync_index[:-1]]
+
+        bounds = np.array([])
+
+        for l, r in zip(sync_index[::2], sync_index[2::2]):
+            # Берем 2 самых сильных пика
+            bounds = np.append(bounds, np.sort(np.argpartition(peaks[l: r], -2)[-2:]) + l)
+
+        X_mrk = X.copy()
+
+        # Теперь разметим каждое измерение в наборе фактическими метками
+        X_mrk[TARGET] = 0
+
+        for i, lr in enumerate(zip(bounds, bounds[1:] + [X_mrk.index[-1] + 1])):
+            l, r = lr
+            # l, r - индексы начала текущего и следующего жестов соответственно
+            X_mrk.loc[l: r, TARGET] = labels[i]      
+
+        return X_mrk, bounds + self.bounds_shift
