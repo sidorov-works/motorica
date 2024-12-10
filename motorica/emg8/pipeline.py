@@ -7,7 +7,7 @@ import scipy.stats as stats
 # Преобразование признаков
 from sklearn.preprocessing import MinMaxScaler
 
-# Пайплайн
+# Пайплайнs
 from sklearn.pipeline import Pipeline
 from sklearn.base import BaseEstimator, TransformerMixin
 
@@ -29,27 +29,19 @@ from typing import List, Any
 # ----------------------------------------------------------------------------------------------
 # ПАРАМЕТРЫ ЧТЕНИЯ ИСХОДНЫХ ДАННЫХ И РАЗМЕТКИ
 
-LABELS_ORIGIN = {
-    'Neutral': 0,
-    'Finish': -1,
-    'Close': 1,
-    'Indication': 8,
-    'Open': 2,
-    'Pinch': 7,
-    'ThumbFingers': 6,
-    'Wrist_Extend': 4,
-    'Wrist_Flex': 3,
-    'Baseline': -1
-    }
+DATA_DIR = 'data/new'
 
-#OMG_CHANELS_CNT = 16  # количество каналов OMG-датчиков
-N_OMG_CH = 16  # количество каналов OMG-датчиков
+N_OMG_CH = 16         # количество каналов OMG-датчиков
 OMG_COL_PRFX = 'omg'  # префикс в названиях столбцов датафрейма, соответствующих OMG-датчикам
+STATE_COL = 'state'   # столбец с названием жеста, соответствующего команде
 CMD_COL = 'id'        # столбец с меткой команды на выполнение жеста
 TS_COL = 'ts'         # столбец метки времени
 
+NOGO_STATE = 'Neutral'      # статус, обозначающий нейтральный жест
+BASELINE_STATE = 'Baseline' # доп. служебный статус в начале монтажа
+FINISH_STATE   = 'Finish'   # доп. служебный статус в конце монтажа
+
 # Список с названиями всех столбцов OMG
-#OMG_COLS = [OMG_COL_PRFX + str(i) for i in range(OMG_CHANELS_CNT)]
 OMG_CH = [OMG_COL_PRFX + str(i) for i in range(N_OMG_CH)]
 
 SYNC_COL = 'sample'   # новый столбец - порядковый номер размеченного жеста
@@ -62,8 +54,7 @@ TARGET = 'act_label'  # новый столбец - таргет (метка ф�
 class BasePeakMarker(BaseEstimator, TransformerMixin):
 
     '''
-    Класс-преобразователь для добавления в данные признака `"act_label"` 
-    – метки фактически выполняемого жеста.
+    Класс-преобразователь для добавления в данные признака `"act_label"` – метки фактически выполняемого жеста.
 
     ### Параметры объекта класса
     
@@ -114,8 +105,9 @@ class BasePeakMarker(BaseEstimator, TransformerMixin):
             self,
             sync_col: str = SYNC_COL,
             cmd_col: str = CMD_COL,
+            state_col: str = STATE_COL,
+            nogo_state: str = NOGO_STATE,
             ts_col: str = TS_COL,
-            #omg_cols: str =  OMG_COLS,
             omg_cols: str =  OMG_CH,
             target_col_name: str = TARGET,
             hi_val_threshold: float = 0.1,
@@ -127,6 +119,8 @@ class BasePeakMarker(BaseEstimator, TransformerMixin):
         ):
         self.sync_col = sync_col
         self.cmd_col = cmd_col
+        self.state_col = state_col
+        self.nogo_state = nogo_state
         self.ts_col = ts_col
         self.omg_cols = omg_cols
         self.target_col_name = target_col_name
@@ -194,6 +188,10 @@ class BasePeakMarker(BaseEstimator, TransformerMixin):
         X: pd.DataFrame
     ) -> np.ndarray[int]:
         
+        # Сохраним исходные индексы и сбросим на время разметки
+        origin_index = X.index
+        X = X.reset_index(drop=True)
+        
         # Сглаживание
         X_omg = pd.DataFrame(X[self.mark_sensors]).rolling(self.window, center=True).median()
         # Приведение к единому масштабу
@@ -218,7 +216,7 @@ class BasePeakMarker(BaseEstimator, TransformerMixin):
         # Искать максимальные пики будем внутри отрезков, 
         # определяемых по признаку синхронизации
         sync_mask = sync != sync.shift(-1)
-        sync_index = np.append([0], X[sync_mask].index)
+        sync_index = np.append([X.index[0]], X[sync_mask].index)
 
         labels = [int(X.loc[idx + 1, self.cmd_col]) for idx in sync_index[:-1]]
 
@@ -238,6 +236,8 @@ class BasePeakMarker(BaseEstimator, TransformerMixin):
             # l, r - индексы начала текущего и следующего жестов соответственно
             X_mrk.loc[l: r, self.target_col_name] = labels[i]      
 
+        X_mrk.index = origin_index
+
         return X_mrk
 
 
@@ -245,7 +245,7 @@ class BasePeakMarker(BaseEstimator, TransformerMixin):
         
         # 1. Определим параметры монтажа:
 
-        grouped = X[X[self.cmd_col] != LABELS['Neutral']].groupby(self.sync_col)
+        grouped = X[X[self.state_col] != self.nogo_state].groupby(self.sync_col)
         # - периодичность измерений – разность между соседними метками времени
         ts_delta = np.median((X[self.ts_col].shift(-1) - X[self.ts_col]).value_counts().index)
 
@@ -329,14 +329,14 @@ class BasePeakMarker(BaseEstimator, TransformerMixin):
 
 def read_emg8(
         montage: str, 
-        dir: str = 'data', 
+        dir: str = DATA_DIR, 
         sep: str = ' ',
-        #feature_cols: List[str] = OMG_COLS,
         feature_cols: List[str] = OMG_CH,
         cmd_col: str = CMD_COL,
+        state_col: str = STATE_COL,
         ts_col: str = TS_COL,
         sync_col_name: str = SYNC_COL,
-        drop_baseline_and_finish: bool = True,
+        states_to_drop: list = [BASELINE_STATE, FINISH_STATE],
         mark_up: bool = True,
         target_col_name: str = TARGET,
         last_train_idx: int = -1
@@ -344,7 +344,7 @@ def read_emg8(
     '''
     Осуществляет чтение файла с данными измерений монтажа .emg8.
 
-    Перенумеровывает классы жестов в порядке их появления в данных монтажа.
+    Перенумеровывает классы жестов в порядке их следования по протоколу монтажа.
 
     Добавляет в возвращаемый датафрейм признак `sample`, представляющий собой порядковый номер жеста в монтаже.
 
@@ -381,12 +381,24 @@ def read_emg8(
     Список: **X_train**, **X_test** | None, **y_train**, **y_train** | None, **data**
     '''
     path = os.path.join(dir, montage)
-    cols = feature_cols + [cmd_col, ts_col]
-    data = pd.read_csv(path, sep=sep, index_col=None)[cols]
+    cols = feature_cols + [cmd_col, state_col, ts_col]
 
-    labels_orgn = dict(data[['State', 'ID']].value_counts().index)
+    data_origin = pd.read_csv(path, sep=sep, index_col=None)
+
+    # Удалим примеры с указанными статусами 
+    # (имеются ввиду служебные дополнительные статусы 'Baseline' и 'Finish')
+    if not states_to_drop is None:
+        mask = ~data_origin[state_col].isin(states_to_drop)
+        data_origin = data_origin[mask]
+
+    # Перенумеруем классы жестов в порядке их появления в монтаже
+    states_ordered = data_origin[state_col].drop_duplicates().reset_index(drop=True)
+    states_ordered = pd.Series(states_ordered.index, index=states_ordered)
+    data_origin[cmd_col] = data_origin[state_col].apply(lambda state: states_ordered[state])
+
+    # Далее работаем только с необходимыми столбцами
+    data = data_origin.copy()[cols]
     
-
     bounds = data[data[cmd_col] != data[cmd_col].shift(1)].index
 
     for i, lr in enumerate(zip(bounds, np.append(bounds[1:], [data.index[-1]]))):
@@ -403,11 +415,6 @@ def read_emg8(
         )
         data = marker.fit_transform(data)
 
-    if drop_baseline_and_finish:
-        label_col = target_col_name if mark_up else cmd_col
-        mask = (data[label_col] != LABELS['Finish']) & (data[label_col] != LABELS['Baseline'])
-        data = data[mask]
-
     X = data[feature_cols].copy()
     y = data[target_col_name if mark_up else cmd_col].copy()
 
@@ -422,7 +429,9 @@ def read_emg8(
         y_train = y.to_numpy()
         y_test = None
 
-    return X_train, X_test, y_train, y_test, data
+    data_origin[TARGET] = data[TARGET]
+
+    return X_train, X_test, y_train, y_test, data_origin
 
 
 # ----------------------------------------------------------------------------------------------
@@ -616,6 +625,9 @@ class PostprocWrapper(BaseEstimator, TransformerMixin):
 
         return y_pred_proc
     
+    def predict_proba(self, X):
+        return self.estimator.predict_proba(X)
+    
     def set_params(self, **params):
 
         self.y_que = np.empty(0)
@@ -672,7 +684,7 @@ def create_logreg_pipeline(
 
         params = {
             'noise_reduct__n_lags': trial.suggest_int('noise_reduct__n_lags', 1, 5),
-            'add_diff__n_lags':     trial.suggest_int('add_diff__n_lags', 1, 8),
+            'add_diff__n_lags':     trial.suggest_int('add_diff__n_lags', 1, 7),
             'add_diff__avg':        trial.suggest_categorical('add_diff__avg', ['mean', 'median']),
             'model__n_lags':        trial.suggest_int('model__n_lags', 3, 7, step=2),
             'model__C':             trial.suggest_int('model__C', 1, 500, log=True)
