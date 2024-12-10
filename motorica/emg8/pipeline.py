@@ -384,6 +384,9 @@ def read_emg8(
     cols = feature_cols + [cmd_col, ts_col]
     data = pd.read_csv(path, sep=sep, index_col=None)[cols]
 
+    labels_orgn = dict(data[['State', 'ID']].value_counts().index)
+    
+
     bounds = data[data[cmd_col] != data[cmd_col].shift(1)].index
 
     for i, lr in enumerate(zip(bounds, np.append(bounds[1:], [data.index[-1]]))):
